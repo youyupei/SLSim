@@ -1,1 +1,1 @@
-# sc_long_read_sim
+# Simulator for single-cell Nanopore RNA sequencing reads
