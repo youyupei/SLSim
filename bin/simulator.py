@@ -8,6 +8,7 @@ from Bio.SeqRecord import SeqRecord
 from random import randint
 
 import helper
+import config
 
 def parse_arg():
     parser = argparse.ArgumentParser(
@@ -18,6 +19,9 @@ def parse_arg():
         '''),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     
+    # Required positional argument
+    parser.add_argument('-r', '--trans-ref', type=str,required=True,
+                        help='Reference transcriptome to simulate reads from.')
     # Required positional argument
     parser.add_argument('-i', '--umi-count-file', type=str, default='../data/SR_bc.csv',
                         help='Filename of the BC UMI count csv file. ')
@@ -46,7 +50,6 @@ def parse_arg():
     helper.check_exist([args.umi_count_file])
     return args
 
-
 def polyT(length):
     return 'T'*length
     # do I need to randomize the length?
@@ -57,11 +60,15 @@ def random_seq(length):
     '''
     return ''.join(np.random.choice(['A','G','C', 'T'],length))
 
-def artificial_template(BC_list, repeats = None,
-                        adaptor='ACTAAAGGCCATTACGGCCTACACGACGCTCTTCCGATCT',
-                        TSO='TGTACTCTGCGTTGATACCACTGCTT',
-                        output_fn='template.fa',
-                        amp_rate = None):
+def artificial_template(BC_list,
+                        repeats,
+                        tran_len,
+                        tran_ref,
+                        adaptor,
+                        TSO,
+                        output_fn,
+                        amp_rate = None
+                        ):
     '''
     Generate a barcode 
         BC_list: list of unique BC
@@ -78,11 +85,9 @@ def artificial_template(BC_list, repeats = None,
     if repeats is None:
         repeats = [1]*len(BC_list)
         
-        
     # v3 adaptor
     with open(output_fn, 'a') as f:
-        random_frag = get_random_frag(
-                    '/home/ubuntu/vol_data/project/SC_analysis/data/Genome_n_Anno/gencode.v31.transcripts.fa',200)
+        random_frag = get_random_frag(tran_ref, tran_len)
         read_index = 0
         pbar = tqdm(total=sum(repeats), desc='Total UMI count')
         for BC,count in tqdm(zip(BC_list, repeats), total = len(BC_list), desc='BCs'):
@@ -141,8 +146,11 @@ def main():
     BC_df = pd.read_csv(args.umi_count_file)
     artificial_template(BC_df.BC, 
                         BC_df.counts, 
+                        tran_len=200,
+                        tran_ref=args.trans_ref,
+                        adaptor=config.ADPTER_SEQ,
+                        TSO=config.TSO_SEQ,
                         output_fn=args.output_filename,
                         amp_rate=args.amp_rate)
-   
 if __name__=='__main__':
     main()
