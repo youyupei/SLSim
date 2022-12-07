@@ -31,7 +31,7 @@ def parse_arg():
                         Error model from babread.[reference needed]
                         '''
                         ))
-    parser.add_argument('--badread-identity', type=str, default='97,1,100',
+    parser.add_argument('--badread-identity', type=str, default='87.5,5,97.5',
                         help=textwrap.dedent('''
                         Identity/accuracy (in percentage) parameter pass to badread: format mean,st,max.
                         '''
@@ -53,6 +53,12 @@ def parse_arg():
                         Thread
                         '''
                         ))
+    parser.add_argument('--test-error-dist',  action='store_true',
+                        help=textwrap.dedent('''
+                        Test distribution of badread
+                        '''
+                        ))
+    
 
     args = parser.parse_args()
     # if args.amp_rate  and args.amp_rate <= 0:
@@ -61,7 +67,8 @@ def parse_arg():
     #             Invalid number of --amp-rate. It takes positive value only...
     #             '''))
     # check file 
-    helper.check_exist([args.template_fasta])
+    if not args.test_error_dist:
+        helper.check_exist([args.template_fasta])
     return args
 
 
@@ -117,9 +124,11 @@ def main(output=sys.stderr):
     
     # error rate distribution, .get_identity method generate random error rate 
     # from beta distribution
-    mean, sd, maxi = [int(x) for x in args.badread_identity.split(',')]
+    mean, sd, maxi = [float(x) for x in args.badread_identity.split(',')]
     identities = Identities(mean, sd, maxi, output)
-    
+    if args.test_error_dist:
+        sys.exit(0)
+
     # input template file
     if os.path.isdir(args.template_fasta):
         fns = helper.get_files(fastq_dir, ['*.fastq', '*.fq', '*.fastq.gz', '*.fq.gz',
