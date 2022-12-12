@@ -60,20 +60,27 @@ def parse_arg():
     return args
 
 
-def sim_read(perfect_read, args):
+def sim_read(perfect_read, args, match_ht_list, error_par, trans_error_pr, match_markov_model):
     """Simulate error into perfect read using Badread error and qscore model
 
         read (str): perfect reads
     """
-    match_ht_list, error_par, trans_error_pr, match_markov_model = \
-                        read_nanosim_profile(args.nanosim_model_prefix)
+    #print('func:sim_read #################')
     middle_read, middle_ref, error_dict, error_count = error_list(len(perfect_read), match_markov_model,
                                                             match_ht_list, error_par, trans_error_pr,
                                                             fastq = True)
-    print('func:sim_read')
-    print(error_dict)
-    print('---------------')
-    print(error_count)
+
+    # print('---------------')
+    # print('---------------')
+    # print('---------------')
+    # print("Insertion:", np.sum([x[1] for x in error_dict.values() if x[0] == 'ins'])) 
+    # print("Deletion:", np.sum([x[1] for x in error_dict.values() if x[0] == 'del'])) 
+    # print("Mismatch:", np.sum([x[1] for x in error_dict.values() if x[0] == 'mis']))
+    # print('---------------')
+    # print(error_dict)
+    # print('---------------')
+    # print('---------------')
+    # print('---------------')
 
     seq, quals = mutate_read(perfect_read, error_dict, error_count, 
                                             basecaller = 'guppy', 
@@ -102,21 +109,11 @@ def read_batch_generator(fasta_fns, batch_size):
             for batch in read_batch:
                 yield batch
 
-def sim_read_batch(read_batch, args):
+def sim_read_batch(read_batch, args, match_ht_list, error_par, trans_error_pr, match_markov_model):
     fastq_lines = []
     for read in read_batch:
-        failed = True
-        #while failed:
-        seq, qscore = sim_read(str(read.seq), args)
-        print('sim_read_batch')
-        print(len(seq))
-        print(len(qscore))
+        seq, qscore = sim_read(str(read.seq), args, match_ht_list, error_par, trans_error_pr, match_markov_model)
         qscore = ''.join([chr(x+33) for x in qscore])
-        failed = False
-            # except:
-            #     failed = True
-            #     pass
-        # write read.id, se quals\
         fastq_lines.extend([f'@{read.id}', seq, '+' , qscore])
     return fastq_lines
 
@@ -236,6 +233,9 @@ def error_list(m_ref, m_model, m_ht_list, error_p, trans_p, fastq):
             l_new -= step
 
         if error != "ins":
+            # edit by yupei: prevent the error happen outside the read length
+            if pos + step >= middle_ref:
+                step = middle_ref-pos-1
             e_dict[pos] = [error, step]
             pos += step
             if pos >= middle_ref:
@@ -276,20 +276,27 @@ def error_list(m_ref, m_model, m_ht_list, error_p, trans_p, fastq):
         if prev_match == 0:
             prev_error += "0"
 
+
+    # edit by yupei to creat error dict
+    for key in set([x[0] for x in e_dict.values()]):
+        e_count[key] = np.sum([x[1] for x in e_dict.values() if x[0] == key])
+    e_count['match'] = m_ref - e_count.get('del', 0)-e_count.get('mis', 0)
+    #print(e_count)
+    e_count.pop('del', None)
     return l_new, middle_ref, e_dict, e_count
 
 def mutate_read(read, e_dict, e_count, basecaller = 'guppy', read_type = 'linear', 
                         fastq=True, error_log = None, read_name=None):
     new_e_dict = e_dict
-
     if fastq:  # Sample base qualities for mis/ins/match
         mis_quals = mm.trunc_lognorm_rvs("mis", read_type, basecaller, e_count["mis"]).tolist()
         ins_quals = mm.trunc_lognorm_rvs("ins", read_type, basecaller, e_count["ins"]).tolist()
         match_quals = mm.trunc_lognorm_rvs("match", read_type, basecaller, e_count["match"]).tolist()
-
+        # print(match_quals)
+        # print(len(match_quals))
     # Mutate read
     quals = []
-    prev = len(read)
+    prev = len(read) + 1 # edit
     for key in sorted(new_e_dict.keys(), reverse=True):
         val = new_e_dict[key]
         key = math.ceil(key)  # Ceil instead of round for consistent match calculations during base qual sim
@@ -329,8 +336,13 @@ def mutate_read(read, e_dict, e_count, basecaller = 'guppy', read_type = 'linear
 
         if fastq:
             if err_end != prev:  # Match after error
+                # print('num_match',prev-err_end)
+                # print('remain',len(match_quals))
                 for j in xrange(prev - err_end):
                     quals.append(match_quals.pop())
+                #     match_quals.pop()
+                #     quals.append(-1)
+                # print(quals)
             quals += err_quals
 
         read = new_read
@@ -361,13 +373,18 @@ def main(output=sys.stderr):
         sys.exit(1)
 
     read_batchs = read_batch_generator(fns, args.batch_size)
-    
 
+    # read model from nanosim
+    match_ht_list, error_par, trans_error_pr, match_markov_model = \
+                        read_nanosim_profile(args.nanosim_model_prefix)
+
+    
     # single threading mode (good for debuging)
     if args.thread == 1:
         pbar = tqdm(unit = 'read', desc='Processed')
         for batch in read_batchs:
-            fastq_records = sim_read_batch(batch, args)
+            fastq_records = sim_read_batch(batch, args,
+                match_ht_list, error_par, trans_error_pr, match_markov_model)
             
             with open(args.output_filename, 'w') as f:
                 f.write('\n'.join(fastq_records) + '\n')
@@ -382,7 +399,11 @@ def main(output=sys.stderr):
     rst_futures = helper.multiprocessing_submit(sim_read_batch,
                     read_batchs, n_process=args.thread, 
                     pbar_update=args.batch_size,
-                    args=args)
+                    args=args,
+                    match_ht_list=match_ht_list, 
+                    error_par=error_par, 
+                    trans_error_pr=trans_error_pr, 
+                    match_markov_model=match_markov_model)
     
     for idx, f in enumerate(rst_futures):
         fastq_records = f.result() #write rst_df out
