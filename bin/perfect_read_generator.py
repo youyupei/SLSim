@@ -222,12 +222,17 @@ def main():
                             amp_rate=args.amp_rate,
                             pbar_pos = idx+1)] = None
         concurrent.futures.wait(futures)
-        for fn in os.listdir(tmp_dirname):
-            with open(fn, 'rb') as readfile:
-                shutil.copyfileobj(f'{tmp_dirname}/{fn}', args.output_filename)
+
+        # cat the tmp file into one
+        with open(args.output_filename, 'wb') as outf:
+            for fn in os.listdir(tmp_dirname):
+                with open(f'{tmp_dirname}/{fn}', 'rb') as readfile:
+                    shutil.copyfileobj(readfile, outf)
+        
         
         # clean tmp dir
+        print("Cleaning the temp directories...")
         shutil.rmtree(tmp_dirname)
-
+        print("Finished.")
 if __name__=='__main__':
     main()
