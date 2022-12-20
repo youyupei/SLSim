@@ -92,7 +92,7 @@ def multiprocessing_submit(func, iterator, n_process=mp.cpu_count()-1 ,pbar = Tr
     executor = concurrent.futures.ProcessPoolExecutor(n_process)
     
     # A dictionary which will contain the  future object
-    max_queue = n_process + 10
+    max_queue = n_process * 2
     if pbar:
         pbar = tqdm(unit = 'read', desc='Processed')
 

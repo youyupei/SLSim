@@ -25,11 +25,12 @@ cd SLSim
 ```
 python3 bin/perfect_read_generator.py -r reference_transcript.fa -i bc_umi.csv -o template.fa
 ```
+The output from `perfect_read_generator.py` is a FASTA file, each entry is an error-free read with the true barcode followed by a index as read id. 
 
 2. Simulate nanopore errors and create fastq file
 ```
 python3 bin/error_simulator.py -t template.fa
 ```
+The output from `error_simulator.py` is a FASTQ file, each entry is a error-containing read with per-base quality score. The read id can be matched to those in the FASTA file generated from `perfect_read_generator.py`.
 
-## To do
-`perfect_read_generator.py` is still single threading.
+
